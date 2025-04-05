@@ -1,0 +1,9 @@
+pandas~=2.2.3
+wikipedia~=1.4.0
+feedparser~=6.0.11
+faiss-cpu~=1.9.0.post1
+uvicorn~=0.34.0
+sentence-transformers~=4.0.2
+fastapi~=0.115.6
+pydantic~=2.10.3
+streamlit~=1.44.1
