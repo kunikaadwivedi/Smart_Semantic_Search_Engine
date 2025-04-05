@@ -18,9 +18,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- Inputs ---
-st.markdown("""
-    <div style='margin-top: 2rem;'>
-""", unsafe_allow_html=True)
+st.markdown("<div style='margin-top: 2rem;'>", unsafe_allow_html=True)
 query = st.text_input("🔎 Enter your search query:", placeholder="e.g. Best headphones for work under 3000")
 k = st.slider("📊 Number of results to display:", 1, 10, 5)
 st.markdown("</div>", unsafe_allow_html=True)
@@ -51,7 +49,10 @@ if query.strip():
     for i, res in enumerate(results, start=1):
         st.markdown(f"""
             <div style='padding: 1.5rem; margin-bottom: 1.8rem; border-left: 6px solid #66BB6A; background-color: #f0fdf4; box-shadow: 2px 2px 6px rgba(0,0,0,0.05); border-radius: 8px;'>
-                <h4 style='margin-bottom: 0.5rem; color: #2E7D32;'>{i}. {res['title']} <span style='color: grey; font-size: 0.85rem;'>({res['source']})</span></h4>
+                <h4 style='margin-bottom: 0.5rem; color: #2E7D32;'>
+                    {i}. <a href="{res.get('url', '#')}" target="_blank">{res['title']}</a>
+                    <span style='color: grey; font-size: 0.85rem;'>({res['source']})</span>
+                </h4>
                 <p style='font-size: 0.98rem; line-height: 1.65; text-align: justify;'>{res['text']}</p>
             </div>
         """, unsafe_allow_html=True)
