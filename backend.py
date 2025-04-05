@@ -31,7 +31,8 @@ def scrape_wikipedia_pages(titles):
                 "id": f"wiki_{title.replace(' ', '_')}",
                 "title": title,
                 "source": "wikipedia",
-                "text": summary
+                "text": summary,
+                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}"
             })
         except Exception as e:
             print(f"Failed to fetch '{title}': {e}")
@@ -48,7 +49,8 @@ def scrape_arxiv(search_query="machine learning", max_results=10):
             "id": f"arxiv_{entry.id.split('/')[-1]}",
             "title": entry.title,
             "source": "arxiv",
-            "text": entry.summary
+            "text": entry.summary,
+            "url": entry.link
         })
     return docs
 
@@ -67,10 +69,10 @@ def fetch_amazon_products(query, n=10):
             "id": f"amazon_{i}",
             "title": product.get("title", ""),
             "source": "amazon",
-            "text": product.get("snippet", product.get("title", ""))
+            "text": product.get("snippet", product.get("title", "")),
+            "url": product.get("link", "")
         })
     return docs
-
 
 # --- Embedding + Index ---
 def embed_documents(docs):
@@ -110,7 +112,8 @@ def semantic_hybrid_search(query, docs, index, model, k=5):
         results.append({
             "title": docs[i]["title"],
             "source": docs[i]["source"],
-            "text": docs[i]["text"][:300]
+            "text": docs[i]["text"][:300],
+            "url": docs[i].get("url", "#")
         })
     return results
 
@@ -121,6 +124,7 @@ class SearchResult(BaseModel):
     title: str
     source: str
     text: str
+    url: str
 
 @app.get("/search", response_model=List[SearchResult])
 def search(query: str = Query(..., description="Your semantic query"), k: int = 5):
