@@ -1,4 +1,4 @@
-# app.py
+# app.py (Optimized for speed ⚡)
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -9,6 +9,7 @@ import urllib.parse
 import feedparser
 import faiss
 import warnings
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
@@ -18,10 +19,10 @@ import requests
 
 warnings.filterwarnings("ignore", category=UserWarning, module='wikipedia')
 
-# Load SBERT model once
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load fast SBERT model once
+model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
 
-# --- Scrapers ---
+# --- Static Scrapers for ArXiv + Wikipedia ---
 def scrape_wikipedia_pages(titles):
     docs = []
     for title in titles:
@@ -54,6 +55,7 @@ def scrape_arxiv(search_query="machine learning", max_results=10):
         })
     return docs
 
+# --- Realtime Amazon Fetch ---
 def fetch_amazon_products(query, n=10):
     url = "https://api.rainforestapi.com/request"
     params = {
@@ -74,7 +76,7 @@ def fetch_amazon_products(query, n=10):
         })
     return docs
 
-# --- Embedding + Index ---
+# --- Embedding + Indexing ---
 def embed_documents(docs):
     texts = [doc["text"] for doc in docs]
     embeddings = model.encode(texts, convert_to_numpy=True)
@@ -86,34 +88,31 @@ def build_faiss_index(embeddings):
     index.add(embeddings)
     return index
 
-# --- Load Everything ---
-def load_data_and_index(query):
-    wiki_titles = [
-        "Artificial neural network",
-        "Transformer (machine learning)",
-        "Artificial intelligence",
-        "Backpropagation"
-    ]
-    wiki_docs = scrape_wikipedia_pages(wiki_titles)
-    arxiv_docs = scrape_arxiv(query, max_results=10)
-    amazon_docs = fetch_amazon_products(query, n=10)
-    all_docs = wiki_docs + arxiv_docs + amazon_docs
-
-    embeddings = embed_documents(all_docs)
-    index = build_faiss_index(embeddings)
-    return all_docs, index
+# --- Preload Static Docs (Wikipedia + ArXiv) ---
+wiki_titles = [
+    "Artificial neural network",
+    "Transformer (machine learning)",
+    "Artificial intelligence",
+    "Backpropagation"
+]
+static_docs = scrape_wikipedia_pages(wiki_titles) + scrape_arxiv("transformer")
+static_embeddings = embed_documents(static_docs)
 
 # --- Semantic Search ---
-def semantic_hybrid_search(query, docs, index, model, k=5):
+def semantic_hybrid_search(query, amazon_docs, k=5):
+    all_docs = static_docs + amazon_docs
+    amazon_embeddings = embed_documents(amazon_docs)
+    all_embeddings = np.vstack([static_embeddings, amazon_embeddings])
+    index = build_faiss_index(all_embeddings)
     query_vec = model.encode([query], convert_to_numpy=True)
     distances, indices = index.search(query_vec, k)
     results = []
     for i in indices[0]:
         results.append({
-            "title": docs[i]["title"],
-            "source": docs[i]["source"],
-            "text": docs[i]["text"][:300],
-            "url": docs[i].get("url", "#")
+            "title": all_docs[i]["title"],
+            "source": all_docs[i]["source"],
+            "text": all_docs[i]["text"][:300],
+            "url": all_docs[i].get("url", "#")
         })
     return results
 
@@ -128,8 +127,8 @@ class SearchResult(BaseModel):
 
 @app.get("/search", response_model=List[SearchResult])
 def search(query: str = Query(..., description="Your semantic query"), k: int = 5):
-    all_docs, index = load_data_and_index(query)
-    return semantic_hybrid_search(query, all_docs, index, model, k)
+    amazon_docs = fetch_amazon_products(query, n=10)
+    return semantic_hybrid_search(query, amazon_docs, k)
 
 # --- Run server ---
 if __name__ == "__main__":
