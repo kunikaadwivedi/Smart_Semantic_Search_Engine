@@ -36,7 +36,7 @@ if query.strip():
         ]
         wiki_docs = b.scrape_wikipedia_pages(wiki_titles)
         arxiv_docs = b.scrape_arxiv(query, max_results=10)
-        amazon_docs = b.load_amazon_data("amazon.csv", n=20)
+        amazon_docs = b.fetch_amazon_products(query, n=10)
         all_docs = wiki_docs + arxiv_docs + amazon_docs
 
         embeddings = b.embed_documents(all_docs)
