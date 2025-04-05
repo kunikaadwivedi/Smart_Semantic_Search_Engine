@@ -46,7 +46,7 @@ st.markdown("</div>", unsafe_allow_html=True)
 if query.strip():
     with st.spinner("⚡ Crunching data from multiple sources..."):
         amazon_docs = b.fetch_amazon_products(query, n=10)
-        results = b.semantic_hybrid_search(query, amazon_docs, k=k)
+        results = b.semantic_hybrid_search(query, amazon_docs, b.static_docs, b.static_embeddings, b.model, k=k)
 
     st.markdown("<hr>", unsafe_allow_html=True)
     st.markdown(f"""
