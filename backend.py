@@ -1,4 +1,4 @@
-# app.py (Optimized for speed ⚡)
+# backend.py (Add this to enable access to static_docs and static_embeddings)
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -11,10 +11,6 @@ import faiss
 import warnings
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
-from typing import List
-import uvicorn
 import requests
 
 warnings.filterwarnings("ignore", category=UserWarning, module='wikipedia')
@@ -22,7 +18,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module='wikipedia')
 # Load fast SBERT model once
 model = SentenceTransformer("paraphrase-MiniLM-L3-v2")
 
-# --- Static Scrapers for ArXiv + Wikipedia ---
+# --- Scrapers ---
 def scrape_wikipedia_pages(titles):
     docs = []
     for title in titles:
@@ -55,7 +51,6 @@ def scrape_arxiv(search_query="machine learning", max_results=10):
         })
     return docs
 
-# --- Realtime Amazon Fetch ---
 def fetch_amazon_products(query, n=10):
     url = "https://api.rainforestapi.com/request"
     params = {
@@ -88,7 +83,7 @@ def build_faiss_index(embeddings):
     index.add(embeddings)
     return index
 
-# --- Preload Static Docs (Wikipedia + ArXiv) ---
+# --- Global Preload ---
 wiki_titles = [
     "Artificial neural network",
     "Transformer (machine learning)",
@@ -99,7 +94,7 @@ static_docs = scrape_wikipedia_pages(wiki_titles) + scrape_arxiv("transformer")
 static_embeddings = embed_documents(static_docs)
 
 # --- Semantic Search ---
-def semantic_hybrid_search(query, amazon_docs, k=5):
+def semantic_hybrid_search(query, amazon_docs, static_docs, static_embeddings, model, k=5):
     all_docs = static_docs + amazon_docs
     amazon_embeddings = embed_documents(amazon_docs)
     all_embeddings = np.vstack([static_embeddings, amazon_embeddings])
@@ -115,21 +110,3 @@ def semantic_hybrid_search(query, amazon_docs, k=5):
             "url": all_docs[i].get("url", "#")
         })
     return results
-
-# --- FastAPI App ---
-app = FastAPI(title="Smart Semantic Search Engine")
-
-class SearchResult(BaseModel):
-    title: str
-    source: str
-    text: str
-    url: str
-
-@app.get("/search", response_model=List[SearchResult])
-def search(query: str = Query(..., description="Your semantic query"), k: int = 5):
-    amazon_docs = fetch_amazon_products(query, n=10)
-    return semantic_hybrid_search(query, amazon_docs, k)
-
-# --- Run server ---
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
