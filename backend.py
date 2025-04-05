@@ -55,7 +55,7 @@ def scrape_arxiv(search_query="machine learning", max_results=10):
 def fetch_amazon_products(query, n=10):
     url = "https://api.rainforestapi.com/request"
     params = {
-        "api_key": "22FE831FD329439D837C1A0EA8358A96",  # Replace this with your Rainforest API key
+        "api_key": "22FE831FD329439D837C1A0EA8358A96",
         "type": "search",
         "amazon_domain": "amazon.in",
         "search_term": query
@@ -70,6 +70,7 @@ def fetch_amazon_products(query, n=10):
             "text": product.get("snippet", product.get("title", ""))
         })
     return docs
+
 
 # --- Embedding + Index ---
 def embed_documents(docs):
