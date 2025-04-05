@@ -73,6 +73,6 @@ st.markdown("""
     <div style='text-align: center; font-size: 14px; color: grey;'>
         🚀 Built with ❤️ by Kunikaa Dwivedi using FastAPI, FAISS, SentenceTransformers, and Streamlit · v1.0
         <br>
-        <a href='https://www.linkedin.com/in/kunikaa-dwivedi' target='_blank'>🔗 Connect on LinkedIn</a>
+        <a href='https://www.linkedin.com/in/kunikaa-dwivedi-429610242/' target='_blank'>🔗 Connect on LinkedIn</a>
     </div>
 """, unsafe_allow_html=True)
