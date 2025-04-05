@@ -1,128 +1,65 @@
-# app.py
+# app_streamlit.py
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-import pandas as pd
-import wikipedia
-import urllib.parse
-import feedparser
-import faiss
-import warnings
-from sentence_transformers import SentenceTransformer
-from fastapi import FastAPI, Query
-from pydantic import BaseModel
-from typing import List
-import uvicorn
+import streamlit as st
+import backend as b
 
-warnings.filterwarnings("ignore", category=UserWarning, module='wikipedia')
+st.set_page_config(page_title="Smart Semantic Search", page_icon="🔍", layout="wide")
 
-# Load SBERT model once
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# --- Header ---
+st.markdown("""
+    <div style='text-align: center;'>
+        <h1 style='color: #1B5E20;'>🔍 Smart Semantic Search Engine</h1>
+        <p style='font-size:18px; margin-top: -10px;'>Search Wikipedia, ArXiv, and Amazon with the power of NLP and Deep Learning!</p>
+    </div>
+    <hr style='border-top: 2px solid #4CAF50;'>
+""", unsafe_allow_html=True)
 
-# --- Scrapers ---
-def scrape_wikipedia_pages(titles):
-    docs = []
-    for title in titles:
-        try:
-            summary = wikipedia.summary(title, sentences=5)
-            docs.append({
-                "id": f"wiki_{title.replace(' ', '_')}",
-                "title": title,
-                "source": "wikipedia",
-                "text": summary
-            })
-        except Exception as e:
-            print(f"Failed to fetch '{title}': {e}")
-            continue
-    return docs
+# --- Inputs ---
+st.markdown("""
+    <div style='margin-top: 2rem;'>
+""", unsafe_allow_html=True)
+query = st.text_input("🔎 Enter your search query:", placeholder="e.g. Best headphones for work under 3000")
+k = st.slider("📊 Number of results to display:", 1, 10, 5)
+st.markdown("</div>", unsafe_allow_html=True)
 
-def scrape_arxiv(search_query="machine learning", max_results=10):
-    query = urllib.parse.quote(search_query)
-    base_url = f"http://export.arxiv.org/api/query?search_query=all:{query}&start=0&max_results={max_results}"
-    feed = feedparser.parse(base_url)
-    docs = []
-    for entry in feed.entries:
-        docs.append({
-            "id": f"arxiv_{entry.id.split('/')[-1]}",
-            "title": entry.title,
-            "source": "arxiv",
-            "text": entry.summary
-        })
-    return docs
+# --- Real-Time Search ---
+if query.strip():
+    with st.spinner("⚡ Crunching data from multiple sources..."):
+        wiki_titles = [
+            "Artificial neural network",
+            "Transformer (machine learning)",
+            "Artificial intelligence",
+            "Backpropagation"
+        ]
+        wiki_docs = b.scrape_wikipedia_pages(wiki_titles)
+        arxiv_docs = b.scrape_arxiv(query, max_results=10)
+        amazon_docs = b.load_amazon_data("amazon.csv", n=20)
+        all_docs = wiki_docs + arxiv_docs + amazon_docs
 
-def load_amazon_data(path="amazon.csv", n=20):
-    df = pd.read_csv(path)
-    df["description"] = df[["About Product", "Technical Details", "Product Specification"]].fillna("").agg(" ".join, axis=1)
-    df = df.dropna(subset=["Product Name"])
-    df = df[df["description"].str.strip() != ""]
-    docs = []
-    for i, row in df.head(n).iterrows():
-        docs.append({
-            "id": f"amazon_{i}",
-            "title": row["Product Name"],
-            "source": "amazon",
-            "text": row["description"]
-        })
-    return docs
+        embeddings = b.embed_documents(all_docs)
+        index = b.build_faiss_index(embeddings)
+        results = b.semantic_hybrid_search(query, all_docs, index, b.model, k)
 
-# --- Embedding + Index ---
-def embed_documents(docs):
-    texts = [doc["text"] for doc in docs]
-    embeddings = model.encode(texts, convert_to_numpy=True)
-    return embeddings
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.markdown(f"""
+        <h3 style='margin-bottom: 1rem; font-size: 22px;'>📄 Showing Top {k} Semantic Results for: <span style='color:#1B5E20;'>"{query}"</span></h3>
+    """, unsafe_allow_html=True)
 
-def build_faiss_index(embeddings):
-    dim = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dim)
-    index.add(embeddings)
-    return index
+    for i, res in enumerate(results, start=1):
+        st.markdown(f"""
+            <div style='padding: 1.5rem; margin-bottom: 1.8rem; border-left: 6px solid #66BB6A; background-color: #f0fdf4; box-shadow: 2px 2px 6px rgba(0,0,0,0.05); border-radius: 8px;'>
+                <h4 style='margin-bottom: 0.5rem; color: #2E7D32;'>{i}. {res['title']} <span style='color: grey; font-size: 0.85rem;'>({res['source']})</span></h4>
+                <p style='font-size: 0.98rem; line-height: 1.65; text-align: justify;'>{res['text']}</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-# --- Load Everything ---
-def load_data_and_index():
-    wiki_titles = [
-        "Artificial neural network",
-        "Transformer (machine learning)",
-        "Artificial intelligence",
-        "Backpropagation"
-    ]
-    wiki_docs = scrape_wikipedia_pages(wiki_titles)
-    arxiv_docs = scrape_arxiv("transformer", max_results=10)
-    amazon_docs = load_amazon_data("amazon.csv", n=20)
-    all_docs = wiki_docs + arxiv_docs + amazon_docs
-
-    embeddings = embed_documents(all_docs)
-    index = build_faiss_index(embeddings)
-    return all_docs, index
-
-# --- Semantic Search ---
-def semantic_hybrid_search(query, docs, index, model, k=5):
-    query_vec = model.encode([query], convert_to_numpy=True)
-    distances, indices = index.search(query_vec, k)
-    results = []
-    for i in indices[0]:
-        results.append({
-            "title": docs[i]["title"],
-            "source": docs[i]["source"],
-            "text": docs[i]["text"][:300]
-        })
-    return results
-
-# --- FastAPI App ---
-app = FastAPI(title="Smart Semantic Search Engine")
-
-class SearchResult(BaseModel):
-    title: str
-    source: str
-    text: str
-
-# Preload data once
-all_docs, index = load_data_and_index()
-
-@app.get("/search", response_model=List[SearchResult])
-def search(query: str = Query(..., description="Your semantic query"), k: int = 5):
-    return semantic_hybrid_search(query, all_docs, index, model, k)
-
-# --- Run server ---
-if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+# --- Footer ---
+st.markdown("""
+    <hr style='border-top: 1px solid #ccc;'>
+    <div style='text-align: center; font-size: 14px; color: grey;'>
+        🚀 Built with ❤️ using FastAPI, FAISS, SentenceTransformers, and Streamlit
+    </div>
+""", unsafe_allow_html=True)
